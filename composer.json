@@ -1,0 +1,21 @@
+{
+    "name": "normphp/container",
+    "description": "container",
+    "homepage": "https://normphp.org/",
+    "keywords": ["container"],
+      "authors": [
+          {
+              "name": "pizepei",
+              "email": "pizepei@pizepei.com"
+          }
+      ],
+      "require": {
+          "php": ">=7.2.0",
+          "psr/container": "~1.0"
+      },
+      "autoload": {
+          "psr-4": {
+              "normphp\\container\\": "src/"
+          }
+      }
+}
