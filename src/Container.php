@@ -138,36 +138,92 @@ class Container implements ContainerInterface
      * @param $name  容器名称（实际上是__call和__callStatic的name参数）
      * @param $arguments 容器实例化的参数（实际上是__call和__callStatic的arguments参数）
      * @title  通过魔术方法注册或者绑定的容器，并且直接使用（方法不强制更新已经存在的服务对象）
-     * @explain 路由功能说明
      * @return bool|mixed
      * @throws \Exception
      */
-    public function bind($name, $arguments)
+    public function bind($name, $arguments=[])
     {
         # 由于baseBind中的对象先定义bind中的，然后服务对象都保存在instances中，bind方法只做不存在的服务的绑定和服务的返回
         #   因此不做判断是否是baseBind服务，也不做强制更新服务对象
-
         # 判断是否已经注册
-        if (isset($this->instances[$name])){
+        if (isset($this->instances[$name])) {
             return $this->instances[$name];
-        }else{
-            # 获取绑定参数baseBind   bind
-            if (isset($this->baseBind[$name])){
-                $bind = 'baseBind';
-            }else if (isset($this->bind[$name])) {
-                $bind = 'bind';
-            }else{
-                throw new \Exception('bind['.$name.'] don t exist');}
-            # 判断是否有参数
-            if (!empty($arguments)){
-                return $this->instances[$name] = new  $this->$bind[$name](...$arguments);
-            }else{
-                return $this->instances[$name] = new  $this->$bind[$name]();
-            }
-
         }
+        if ($key = array_search($name,$this->baseBind) !==false) {
+            $name = $key;
+        }
+        if ($key = array_search($name,$this->bind) !==false) {
+            $name = $key;
+        }
+        $className = $this->baseBind[$name]??($this->bind[$name]??$name);
+        # 判断是否有参数
+        return $this->instances[$name] = $this->newInstanceArgs($className,$arguments);
         throw new \Exception('bind don t exist');
     }
+
+    /**
+     * 自动根据容器标识或者类路径 使用自动识别的参数实例化对象
+     * @param $name
+     * @return void
+     */
+    public function newInstanceArgs($name,$arguments)
+    {
+        $class = new \ReflectionClass($name);
+        if ($class->hasMethod('__construct')) {
+            // 获得构造函数
+            $construct = $class->getConstructor();
+            // 判断构造函数是否有参数
+            $params = $construct->getParameters();
+            $args = $this->getMethodParams($params,$arguments);
+        }
+        return $class->newInstanceArgs($args??[]);
+    }
+
+    /**
+     * 获取类的参数并且处理好在返回
+     * @param \ReflectionParameter  $data
+     * @return void
+     * @throws \ReflectionException
+     */
+    public function getMethodParams($data,$arguments)
+    {
+        $params = [];
+        /**
+         * 循环处理参数
+         * @var \ReflectionParameter $value
+         */
+        foreach ($data as $key => $value) {
+            /**
+             * 判断是否传自定义参数，有就使用
+             */
+            if (array_key_exists($key,$arguments)){
+                $params[] = $arguments[$key];
+                continue;
+            }
+            /**
+             * 判断是否有默认值
+             */
+            if ($value->isDefaultValueAvailable()) {
+                $params[] = $value->getDefaultValue();
+            }else{
+                /** 判断是否有参数类型 **/
+                if (!$value->hasType()) {
+                    continue;
+                }
+                /** 判断是否是php内置类型 **/
+                if ($value->getType()->isBuiltin()) {
+                    continue;
+                }
+                /**
+                 * 不是任何类、接口或 trait 的类型
+                 * 使用统一方法进行处理
+                 */
+                $this->bind($value->getType()->getName());
+            }
+        }
+        return $params;
+    }
+
     /**
      * 当调用一个不存在的 静态  方法时使用
      * @param $name
